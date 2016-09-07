@@ -24,6 +24,23 @@ class Point {
   }
 }
 
+// store front back normalized score
+class FBDist {
+  double front, back;
+  FBDist (double f, double b) {
+    front = f;
+    back = b;
+  }
+
+  double Front() {
+    return front;
+  }
+
+  double Back() {
+    return back;
+  }
+}
+
 double[] base  = new double[3];
 double[] middle = new double[3];
 double[] thumb = new double[3];
@@ -75,9 +92,18 @@ Point[] frontPnts = new Point[100];
 Point[] centerPnts = new Point[100];
 Point[] backPnts = new Point[100];
 
+FBDist[] frontFBDists = new FBDist[100];
+FBDist[] centerFBDists = new FBDist[100];
+FBDist[] backFBDists = new FBDist[100];
+
 Point trackFrontPnt;
 Point trackCenterPnt;
 Point trackBackPnt;
+
+FBDist trackFrontDist;
+FBDist trackCenterDist;
+FBDist trackBackDist;
+
 
 //////////////////////////////////////////////
 
@@ -433,6 +459,24 @@ Point calculateMeanPnt(Point[] pnts) {
   return meanPnt;
 }
 
+FBDist calculateMeanDist(FBDist[] data) {
+  double sumFront = 0;
+  double sumBack = 0;
+
+  for(int i = 0; i < 100; i ++) {
+    sumFront += data[i].Front();
+    sumBack += data[i].Back();
+  }
+
+  double meanFront = sumFront / 100;
+  double meanBack = sumBack / 100;
+
+  FBDist meanDist = new FBDist(meanFront, meanBack);
+  return meanDist;
+}
+
+
+
 void parseInput(String input) {
   String[] inputObjs = input.split(",");
   //print(Arrays.toString(inputObjs));
@@ -478,31 +522,28 @@ void drawPoints() {
 
 void drawDist() {
 
-  text("frontDist: " +frontDist, 10, 110);
+  text("frontDist: " + frontDist, 10, 110);
   text("backDist: " + backDist, 10, 130);
   text("frontDist_last: " +frontDist_last, 10, 150);
   text("backDist_last: " + backDist_last, 10, 170);
 }
 
-void drawTrackedPnts() {
+void drawTrackedDists() {
 
   double[] output;
 
-  if(trackFrontPnt != null) {
-    output = trackFrontPnt.getPoint();
-    String result = String.format("Tracked_frontPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackFrontDist != null) {
+    String result = String.format("Tracked_front: (%.4f, %.4f)", trackFrontDist.Front(), trackFrontDist.Back());
     text(result, 10, 190);
   }
 
-  if(trackBackPnt != null) {
-    output = trackBackPnt.getPoint();
-    String result = String.format("Tracked_backPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackBackDist != null) {
+    String result = String.format("Tracked_back: (%.4f, %.4f)", trackBackDist.Front(), trackBackDist.Back());
     text(result, 10, 210);
   }
 
-  if(trackCenterPnt != null) {
-    output = trackCenterPnt.getPoint();
-    String result = String.format("Tracked_centerPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackCenterDist != null) {
+    String result = String.format("Tracked_center: (%.4f, %.4f)", trackCenterDist.Front(), trackCenterDist.Back());
     text(result, 10, 230);
   }
 }
@@ -540,6 +581,10 @@ void setup() {
   print("x: " + x + "\ny: " + y + "\n");
   mode = 4;
   print("cursor: " + segcursor()+"\n");
+}
+
+double getPosOnLine(double[] start, double[] end, double[] pnt) {
+  return (distance(start[0], start[1], start[2], pnt[0], pnt[1], pnt[2]) / (distance(end[0], end[1], end[2], start[0], start[1], start[2]) /10.0));
 }
 
 void draw() {
@@ -587,25 +632,35 @@ void draw() {
         text("status: tracking front...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackFrontPnt = calculateMeanPnt(frontPnts);
-          println(trackFrontPnt.getPoint());
+          trackFrontDist = calculateMeanDist(frontFBDists);
+
         }
         else {
-          frontPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          frontFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
+
           trackCounter++;
         }
         break;
 
-      // tracking center
       case 2:
         text("status: tracking center...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackCenterPnt = calculateMeanPnt(centerPnts);
-          println(trackCenterPnt.getPoint());
+          trackCenterDist = calculateMeanDist(centerFBDists);
+
         }
         else {
-          centerPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          centerFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
           trackCounter++;
         }
         break;
@@ -615,18 +670,22 @@ void draw() {
         text("status: tracking back...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackBackPnt = calculateMeanPnt(backPnts);
-          println(trackBackPnt.getPoint());
+          trackBackDist = calculateMeanDist(backFBDists);
         }
         else {
-          backPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          backFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
           trackCounter++;
         }
         break;
       
     }
 
-    drawTrackedPnts();
+    drawTrackedDists();
   } else {
     text("status: no connection", 10, 80); 
   }
