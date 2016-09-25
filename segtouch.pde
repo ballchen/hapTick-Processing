@@ -41,6 +41,30 @@ class FBDist {
   }
 }
 
+// a 1D coordinate system
+
+class Cord {
+  double start, end;
+  Cord(double s, double e) {
+    start = s;
+    end = e;
+  }
+
+  //2 8 -> 0 10
+  double mapTo(double input, double grad) {
+    if(input < start) {
+      return 0;
+    }
+    
+    if(input > end) {
+      return grad;
+    }
+
+    return Math.floor((input - start) / (end - start) * grad);
+  }
+}
+
+
 double[] base  = new double[3];
 double[] middle = new double[3];
 double[] thumb = new double[3];
@@ -103,6 +127,14 @@ Point trackBackPnt;
 FBDist trackFrontDist;
 FBDist trackCenterDist;
 FBDist trackBackDist;
+
+Cord fCord;
+Cord bCord;
+
+
+//front back
+double[] lastPos = new double[2];
+double[] currentPos = new double[2];
 
 
 //////////////////////////////////////////////
@@ -587,6 +619,19 @@ double getPosOnLine(double[] start, double[] end, double[] pnt) {
   return (distance(start[0], start[1], start[2], pnt[0], pnt[1], pnt[2]) / (distance(end[0], end[1], end[2], start[0], start[1], start[2]) /10.0));
 }
 
+double[] getFrontBackLinePos() {
+  double[] result = new double[2];
+  double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+  double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+  double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+  double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+  result[0] = frontLinePos;
+  result[1] = backLinePos;
+
+  return result;
+}
+
 void draw() {
   background(200);
 
@@ -686,6 +731,30 @@ void draw() {
     }
 
     drawTrackedDists();
+
+    //if tracked three dists , new front and back cord
+    if(trackFrontDist && trackBackDist && trackCenterDist) {
+      fCord = new Cord(trackFrontDist.front(), trackCenterDist.front());
+      bCord = new Cord(trackBackDist.back(), trackCenterDist.back());
+      
+      lastPos[0] = currentPos[0] ? currentPos[0]: 0;
+      lastPos[1] = currentPos[1] ? currentPos[1]: 0;
+      double[] pos = getFrontBackLinePos();
+
+      currentPos = new double[2];
+
+      double currentPos[0] = fCord.mapTo(pos[0], 5);
+      double currentPos[1] = bCord.mapTo(pos[1], 5);
+
+      if(currentPos[0] != lastPos[0] || currentPos[1] != lastPos[1]) {
+        //
+        // trigger the ring to buzz
+        //
+        //
+      }
+
+    }
+
   } else {
     text("status: no connection", 10, 80); 
   }
