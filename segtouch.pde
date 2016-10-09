@@ -1,9 +1,13 @@
 import processing.net.*; 
+import processing.serial.*;
 import java.util.Arrays;
 
 Server myServer;
+Serial serialPort;
 String dataIn;
 PFont f;
+
+boolean debug = true;
 
 
 // basic struct
@@ -580,6 +584,25 @@ void drawTrackedDists() {
   }
 }
 
+// arduino serial communication functions
+
+void send_vibrate_msg () {
+  Port.write("1\n");
+}
+
+void send_vibrate_stop_msg () {
+  Port.write("0\n");
+}
+
+void debug_print_msg() {
+  String val = Port.readStringUntil('\n');
+  if(val != "") {
+    println(val);
+  }
+}
+
+// arduino end
+
 void setup() {
 
   // basic setup --start
@@ -592,6 +615,9 @@ void setup() {
 
 
   myServer = new Server(this, 4000);
+
+  // init serial port
+  serialPort = new Serial(this, Serial.list()[0], 9600);
 
   middle[0] = 115.047778;
   middle[1] = -58.291351;
@@ -750,7 +776,7 @@ void draw() {
         //
         // trigger the ring to buzz
         //
-        //
+        send_vibrate_msg();
       }
 
     }
