@@ -1,9 +1,13 @@
 import processing.net.*; 
+import processing.serial.*;
 import java.util.Arrays;
 
 Server myServer;
+Serial serialPort;
 String dataIn;
 PFont f;
+
+boolean debug = true;
 
 
 // basic struct
@@ -23,6 +27,47 @@ class Point {
     return arr;
   }
 }
+
+// store front back normalized score
+class FBDist {
+  double front, back;
+  FBDist (double f, double b) {
+    front = f;
+    back = b;
+  }
+
+  double Front() {
+    return front;
+  }
+
+  double Back() {
+    return back;
+  }
+}
+
+// a 1D coordinate system
+
+class Cord {
+  double start, end;
+  Cord(double s, double e) {
+    start = s;
+    end = e;
+  }
+
+  //2 8 -> 0 10
+  double mapTo(double input, double grad) {
+    if(input < start) {
+      return 0;
+    }
+    
+    if(input > end) {
+      return grad;
+    }
+
+    return Math.floor((input - start) / (end - start) * grad);
+  }
+}
+
 
 double[] base  = new double[3];
 double[] middle = new double[3];
@@ -75,9 +120,26 @@ Point[] frontPnts = new Point[100];
 Point[] centerPnts = new Point[100];
 Point[] backPnts = new Point[100];
 
+FBDist[] frontFBDists = new FBDist[100];
+FBDist[] centerFBDists = new FBDist[100];
+FBDist[] backFBDists = new FBDist[100];
+
 Point trackFrontPnt;
 Point trackCenterPnt;
 Point trackBackPnt;
+
+FBDist trackFrontDist;
+FBDist trackCenterDist;
+FBDist trackBackDist;
+
+Cord fCord;
+Cord bCord;
+
+
+//front back
+double[] lastPos = new double[2];
+double[] currentPos = new double[2];
+
 
 //////////////////////////////////////////////
 
@@ -433,6 +495,24 @@ Point calculateMeanPnt(Point[] pnts) {
   return meanPnt;
 }
 
+FBDist calculateMeanDist(FBDist[] data) {
+  double sumFront = 0;
+  double sumBack = 0;
+
+  for(int i = 0; i < 100; i ++) {
+    sumFront += data[i].Front();
+    sumBack += data[i].Back();
+  }
+
+  double meanFront = sumFront / 100;
+  double meanBack = sumBack / 100;
+
+  FBDist meanDist = new FBDist(meanFront, meanBack);
+  return meanDist;
+}
+
+
+
 void parseInput(String input) {
   String[] inputObjs = input.split(",");
   //print(Arrays.toString(inputObjs));
@@ -478,34 +558,50 @@ void drawPoints() {
 
 void drawDist() {
 
-  text("frontDist: " +frontDist, 10, 110);
+  text("frontDist: " + frontDist, 10, 110);
   text("backDist: " + backDist, 10, 130);
   text("frontDist_last: " +frontDist_last, 10, 150);
   text("backDist_last: " + backDist_last, 10, 170);
 }
 
-void drawTrackedPnts() {
+void drawTrackedDists() {
 
   double[] output;
 
-  if(trackFrontPnt != null) {
-    output = trackFrontPnt.getPoint();
-    String result = String.format("Tracked_frontPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackFrontDist != null) {
+    String result = String.format("Tracked_front: (%.4f, %.4f)", trackFrontDist.Front(), trackFrontDist.Back());
     text(result, 10, 190);
   }
 
-  if(trackBackPnt != null) {
-    output = trackBackPnt.getPoint();
-    String result = String.format("Tracked_backPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackBackDist != null) {
+    String result = String.format("Tracked_back: (%.4f, %.4f)", trackBackDist.Front(), trackBackDist.Back());
     text(result, 10, 210);
   }
 
-  if(trackCenterPnt != null) {
-    output = trackCenterPnt.getPoint();
-    String result = String.format("Tracked_centerPnt: (%.4f, %.4f, %.4f)", output[0], output[1], output[2]);
+  if(trackCenterDist != null) {
+    String result = String.format("Tracked_center: (%.4f, %.4f)", trackCenterDist.Front(), trackCenterDist.Back());
     text(result, 10, 230);
   }
 }
+
+// arduino serial communication functions
+
+void send_vibrate_msg () {
+  Port.write("1\n");
+}
+
+void send_vibrate_stop_msg () {
+  Port.write("0\n");
+}
+
+void debug_print_msg() {
+  String val = Port.readStringUntil('\n');
+  if(val != "") {
+    println(val);
+  }
+}
+
+// arduino end
 
 void setup() {
 
@@ -519,6 +615,9 @@ void setup() {
 
 
   myServer = new Server(this, 4000);
+
+  // init serial port
+  serialPort = new Serial(this, Serial.list()[0], 9600);
 
   middle[0] = 115.047778;
   middle[1] = -58.291351;
@@ -540,6 +639,23 @@ void setup() {
   print("x: " + x + "\ny: " + y + "\n");
   mode = 4;
   print("cursor: " + segcursor()+"\n");
+}
+
+double getPosOnLine(double[] start, double[] end, double[] pnt) {
+  return (distance(start[0], start[1], start[2], pnt[0], pnt[1], pnt[2]) / (distance(end[0], end[1], end[2], start[0], start[1], start[2]) /10.0));
+}
+
+double[] getFrontBackLinePos() {
+  double[] result = new double[2];
+  double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+  double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+  double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+  double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+  result[0] = frontLinePos;
+  result[1] = backLinePos;
+
+  return result;
 }
 
 void draw() {
@@ -587,25 +703,35 @@ void draw() {
         text("status: tracking front...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackFrontPnt = calculateMeanPnt(frontPnts);
-          println(trackFrontPnt.getPoint());
+          trackFrontDist = calculateMeanDist(frontFBDists);
+
         }
         else {
-          frontPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          frontFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
+
           trackCounter++;
         }
         break;
 
-      // tracking center
       case 2:
         text("status: tracking center...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackCenterPnt = calculateMeanPnt(centerPnts);
-          println(trackCenterPnt.getPoint());
+          trackCenterDist = calculateMeanDist(centerFBDists);
+
         }
         else {
-          centerPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          centerFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
           trackCounter++;
         }
         break;
@@ -615,18 +741,46 @@ void draw() {
         text("status: tracking back...", 10, 80); 
         if(trackCounter >= 100) {
           trackEnd();
-          trackBackPnt = calculateMeanPnt(backPnts);
-          println(trackBackPnt.getPoint());
+          trackBackDist = calculateMeanDist(backFBDists);
         }
         else {
-          backPnts[trackCounter] = new Point(thumb[0], thumb[1], thumb[2]);
+          double[] tempPntFront = pnt2lineVector(thumb[0], thumb[1], thumb[2], middle[0], middle[1], middle[2], base[0], base[1], base[2]);
+          double[] tempPntBack = pnt2lineVector(thumb[0], thumb[1], thumb[2], top[0], top[1], top[2], base[0], base[1], base[2]);
+          double frontLinePos = getPosOnLine(middle, base, tempPntFront);
+          double backLinePos = getPosOnLine(top, base, tempPntBack);
+
+          backFBDists[trackCounter] = new FBDist(frontLinePos, backLinePos);
           trackCounter++;
         }
         break;
       
     }
 
-    drawTrackedPnts();
+    drawTrackedDists();
+
+    //if tracked three dists , new front and back cord
+    if(trackFrontDist && trackBackDist && trackCenterDist) {
+      fCord = new Cord(trackFrontDist.front(), trackCenterDist.front());
+      bCord = new Cord(trackBackDist.back(), trackCenterDist.back());
+      
+      lastPos[0] = currentPos[0] ? currentPos[0]: 0;
+      lastPos[1] = currentPos[1] ? currentPos[1]: 0;
+      double[] pos = getFrontBackLinePos();
+
+      currentPos = new double[2];
+
+      double currentPos[0] = fCord.mapTo(pos[0], 5);
+      double currentPos[1] = bCord.mapTo(pos[1], 5);
+
+      if(currentPos[0] != lastPos[0] || currentPos[1] != lastPos[1]) {
+        //
+        // trigger the ring to buzz
+        //
+        send_vibrate_msg();
+      }
+
+    }
+
   } else {
     text("status: no connection", 10, 80); 
   }
