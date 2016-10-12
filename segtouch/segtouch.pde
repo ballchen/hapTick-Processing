@@ -3,7 +3,7 @@ import processing.serial.*;
 import java.util.Arrays;
 
 Server myServer;
-Serial serialPort;
+Serial Port;
 String dataIn;
 PFont f;
 
@@ -617,7 +617,7 @@ void setup() {
   myServer = new Server(this, 4000);
 
   // init serial port
-  serialPort = new Serial(this, Serial.list()[0], 9600);
+  Port = new Serial(this, Serial.list()[1], 9600);
 
   middle[0] = 115.047778;
   middle[1] = -58.291351;
@@ -759,20 +759,26 @@ void draw() {
     drawTrackedDists();
 
     //if tracked three dists , new front and back cord
-    if(trackFrontDist && trackBackDist && trackCenterDist) {
-      fCord = new Cord(trackFrontDist.front(), trackCenterDist.front());
-      bCord = new Cord(trackBackDist.back(), trackCenterDist.back());
+    if(trackFrontDist!=null && trackBackDist!=null && trackCenterDist!=null) {
+      fCord = new Cord(trackFrontDist.Front(), trackCenterDist.Front());
+      bCord = new Cord(trackBackDist.Back(), trackCenterDist.Back());
       
-      lastPos[0] = currentPos[0] ? currentPos[0]: 0;
-      lastPos[1] = currentPos[1] ? currentPos[1]: 0;
+      lastPos[0] = (currentPos[0]>0) ? currentPos[0]: 0;
+      lastPos[1] = (currentPos[1]>0) ? currentPos[1]: 0;
       double[] pos = getFrontBackLinePos();
+       
+       
 
       currentPos = new double[2];
+      
 
-      double currentPos[0] = fCord.mapTo(pos[0], 5);
-      double currentPos[1] = bCord.mapTo(pos[1], 5);
+      currentPos[0] = fCord.mapTo(pos[0], 3);
+      currentPos[1] = bCord.mapTo(pos[1], 3);
+      
+      text(Arrays.toString(currentPos), 20, 250);
 
       if(currentPos[0] != lastPos[0] || currentPos[1] != lastPos[1]) {
+        
         //
         // trigger the ring to buzz
         //
