@@ -66,6 +66,13 @@ class Cord {
 
     return Math.floor((input - start) / (end - start) * grad);
   }
+  
+  boolean isOnLine(double input) {
+    if(input < start || input > end) {
+      return false;
+    }
+    return true;
+  }
 }
 
 
@@ -770,14 +777,20 @@ void draw() {
        
 
       currentPos = new double[2];
-      
+      boolean[] currentPntOnLine = new boolean[2];
 
       currentPos[0] = fCord.mapTo(pos[0], 3);
       currentPos[1] = bCord.mapTo(pos[1], 3);
       
+      currentPntOnLine[0] = fCord.isOnLine(pos[0]);
+      currentPntOnLine[1] = bCord.isOnLine(pos[1]);
+      
+      
       text(Arrays.toString(currentPos), 20, 250);
+      text(Arrays.toString(currentPntOnLine), 20, 270);
 
-      if(currentPos[0] != lastPos[0] || currentPos[1] != lastPos[1]) {
+      if((currentPos[0] != lastPos[0] && currentPntOnLine[0]) || 
+         (currentPos[1] != lastPos[1] && currentPntOnLine[1])) {
         
         //
         // trigger the ring to buzz
