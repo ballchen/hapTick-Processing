@@ -32,8 +32,8 @@ void send_vibrate_stop_msg () {
 
 void setup() {
   frameRate(60);
-  Port = new Serial(this, Serial.list()[1], 9600);
-  println(Serial.list()[1]);
+  Port = new Serial(this, Serial.list()[0], 9600);
+  println(Serial.list()[0]);
   Port.write("0\n");
   
   cp5 = new ControlP5(this);
